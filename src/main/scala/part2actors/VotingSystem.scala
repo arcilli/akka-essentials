@@ -2,8 +2,6 @@ package part2actors
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 
-import scala.collection.mutable
-
 object VotingSystem extends App {
   val system = ActorSystem("votingSystemDemo")
   val alice = system.actorOf(Props[Citizen])
@@ -16,41 +14,42 @@ object VotingSystem extends App {
 
   class Citizen extends Actor {
 
-    var myOption: String = ""
+    var candidate: Option[String] = None
 
     override def receive: Receive = {
-      case Vote(value) => {
-        println(s"I vote for $value.")
-        myOption = value
-      }
-      // store with who I voted with
-      case VoteStatusRequest =>
-        println(s"Sent my vote for ${myOption}")
-        sender() ! VoteStatusReply(Some(myOption))
+      case Vote(c) =>  candidate = Some(c)
+      case VoteStatusRequest => sender() ! VoteStatusReply(candidate)
     }
   }
 
   case class Vote(candidate: String)
-
   case class AggregateVotes(citizens: Set[ActorRef])
-
   class VoteAggregator extends Actor {
 
-    val candidateAndNoVotes: mutable.Map[String, Int] = scala.collection.mutable.Map()
+    var stillWaiting: Set[ActorRef] = Set()
+    var currentStats: Map[String, Int] = Map()
 
     override def receive: Receive = {
       case AggregateVotes(citizens) => {
         println("Let's aggregate votes")
+        stillWaiting = citizens
         citizens.foreach(_ ! VoteStatusRequest)
       }
-      case VoteStatusReply(reply) =>
-        println("Received voteStatusReply")
-        reply.map(candidateName => {
-          val currentValue = candidateAndNoVotes.getOrElse(candidateName, 0)
-          candidateAndNoVotes.put(candidateName, currentValue + 1)
+      case VoteStatusReply(None) =>
+        // a citizen hasn't voted yet
+
+        // send another request, maybe this time he'll respond
+        sender() ! VoteStatusRequest // ofc this might end up in an infinite loop
+
+      case VoteStatusReply(Some(candidate)) =>
+        val newStillWaiting = stillWaiting - sender()
+        val currentVotesOfCandidate = currentStats.getOrElse(candidate, 0)
+        currentStats = currentStats + (candidate -> (currentVotesOfCandidate + 1))
+        if (newStillWaiting.isEmpty) {
+          println(s"[aggregator] poll stats: $currentStats")
+        } else {
+          stillWaiting = newStillWaiting
         }
-        )
-        println(candidateAndNoVotes.map(pair => pair._1 + "=" + pair._2).mkString(","))
     }
   }
 
