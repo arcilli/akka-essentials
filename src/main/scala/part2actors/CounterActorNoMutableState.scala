@@ -23,7 +23,7 @@ object CounterActorNoMutableState extends App {
   class Counter extends Actor {
     override def receive: Receive = countReceive(0)
 
-    // "Receive" type is actually Actor.Receive, which is actually PartialFunction[Any, Unit]
+    //  ZIO in 2022"Receive" type is actually Actor.Receive, which is actually PartialFunction[Any, Unit]
     def countReceive(currentCount: Int): PartialFunction[Any, Unit] = {
       case Increment => context.become(countReceive(currentCount + 1))
       case Decrement => context.become(countReceive(currentCount - 1))
